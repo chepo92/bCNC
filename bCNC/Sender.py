@@ -21,6 +21,7 @@ import threading
 import webbrowser
 
 from datetime import datetime
+
 try:
 	import serial
 except:
@@ -196,7 +197,7 @@ class Sender:
 	# can return a python exception, needs to be catched
 	#----------------------------------------------------------------------
 	def evaluate(self, line):
-		return self.gcode.evaluate(CNC.compileLine(line,True))
+		return self.gcode.evaluate(CNC.compileLine(line,True), self)
 
 	#----------------------------------------------------------------------
 	# Execute a line as gcode if pattern matches
@@ -403,7 +404,7 @@ class Sender:
 		elif ext == ".stl" or ext == ".ply":
 			# FIXME: implements solid import???
 			import tkMessageBox
-			tkMessageBox.showinfo("Open 3D Mesh", "Importing of 3D mesh files in .STL and .PLY format is supported by SliceMesh plugin.\nYou can find it in Tools->SliceMesh.")
+			tkMessageBox.showinfo("Open 3D Mesh", "Importing of 3D mesh files in .STL and .PLY format is supported by SliceMesh plugin.\nYou can find it in CAM->SliceMesh.")
 		elif ext==".dxf":
 			self.gcode.init()
 			self.gcode.importDXF(filename)
@@ -456,6 +457,21 @@ class Sender:
 		return "break"
 
 	#----------------------------------------------------------------------
+	# Serial write
+	#----------------------------------------------------------------------
+	def serial_write(self, data):
+		#print("W "+str(type(data))+" : "+str(data))
+
+		#if sys.version_info[0] == 2:
+		#	ret = self.serial.write(str(data))
+		if isinstance(data, bytes):
+			ret = self.serial.write(data)
+		else:
+			ret = self.serial.write(data.encode())
+
+		return ret
+
+	#----------------------------------------------------------------------
 	# Open serial port
 	#----------------------------------------------------------------------
 	def open(self, device, baudrate):
@@ -487,7 +503,7 @@ class Sender:
 		except IOError:
 			pass
 		time.sleep(1)
-		self.serial.write(b"\n\n")
+		self.serial_write(b"\n\n")
 		self._gcount = 0
 		self._alarm  = True
 		self.thread  = threading.Thread(target=self.serialIO)
@@ -528,7 +544,7 @@ class Sender:
 	#----------------------------------------------------------------------
 	def sendHex(self, hexcode):
 		if self.serial is None: return
-		self.serial.write(chr(int(hexcode,16)))
+		self.serial_write(chr(int(hexcode,16)))
 		self.serial.flush()
 
 	#----------------------------------------------------------------------
@@ -631,6 +647,10 @@ class Sender:
 	#----------------------------------------------------------------------
 	def controllerStateChange(self, state):
 		print("Controller state changed to: %s (Running: %s)"%(state, self.running))
+		if state in ("Idle"):
+			self.mcontrol.viewParameters()
+			self.mcontrol.viewState()
+
 		if self.cleanAfter == True and self.running == False and state in ("Idle"):
 			self.cleanAfter = False
 			self.jobDone()
@@ -650,8 +670,7 @@ class Sender:
 			t = time.time()
 			# refresh machine position?
 			if t-tr > SERIAL_POLL:
-				self.serial.write(b"?")
-				self.sio_status = True
+				self.mcontrol.viewStatusReport()
 				tr = t
 
 				#If Override change, attach feed
@@ -686,13 +705,13 @@ class Sender:
 							self._gcount += 1
 						tosend = None
 
-					elif not isinstance(tosend,str) and not isinstance(tosend,unicode):
+					elif not isinstance(tosend,str):
 						try:
-							tosend = self.gcode.evaluate(tosend)
+							tosend = self.gcode.evaluate(tosend, self)
 #							if isinstance(tosend, list):
 #								cline.append(len(tosend[0]))
 #								sline.append(tosend[0])
-							if isinstance(tosend,str) or isinstance(tosend,unicode):
+							if isinstance(tosend,str):
 								tosend += "\n"
 							else:
 								# Count executed commands as well
@@ -710,8 +729,6 @@ class Sender:
 				if tosend is not None:
 					# All modification in tosend should be
 					# done before adding it to cline
-					if isinstance(tosend, unicode):
-						tosend = tosend.encode("ascii","replace")
 
 					# Keep track of last feed
 					pat = FEEDPAT.match(tosend)
@@ -746,7 +763,7 @@ class Sender:
 			# Anything to receive?
 			if self.serial.inWaiting() or tosend is None:
 				try:
-					line = str(self.serial.readline()).strip()
+					line = str(self.serial.readline().decode()).strip()
 				except:
 					self.log.put((Sender.MSG_RECEIVE, str(sys.exc_info()[1])))
 					self.emptyQueue()
@@ -778,20 +795,22 @@ class Sender:
 			if tosend is not None and sum(cline) < RX_BUFFER_SIZE:
 				self._sumcline = sum(cline)
 #				if isinstance(tosend, list):
-#					self.serial.write(str(tosend.pop(0)))
+#					self.serial_write(str(tosend.pop(0)))
 #					if not tosend: tosend = None
 
 				#print ">S>",repr(tosend),"stack=",sline,"sum=",sum(cline)
 				if self.mcontrol.gcode_case > 0: tosend = tosend.upper()
 				if self.mcontrol.gcode_case < 0: tosend = tosend.lower()
-				self.serial.write(bytes(tosend))
-				#self.serial.write(tosend.encode("utf8"))
+
+				self.serial_write(tosend)
+
+				#self.serial_write(tosend)
 				#self.serial.flush()
 				self.log.put((Sender.MSG_BUFFER,tosend))
 
 				tosend = None
 				if not self.running and t-tg > G_POLL:
-					tosend = b"$G\n"
+					tosend = b"$G\n" #FIXME: move to controller specific class
 					sline.append(tosend)
 					cline.append(len(tosend))
 					tg = t

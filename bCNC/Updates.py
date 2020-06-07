@@ -59,7 +59,7 @@ class CheckUpdateDialog(Toplevel):
 		self.webversion = Label(frame, anchor=W)
 		self.webversion.grid(row=1, column=1, sticky=EW)
 		tkExtra.Balloon.set(self.webversion,
-			_("Latest release version on on github"))
+			_("Latest release version on github"))
 		l = Label(frame, text=_("Published at:"))
 		l.grid(row=2, column=0, sticky=E, pady=1)
 
@@ -86,7 +86,7 @@ class CheckUpdateDialog(Toplevel):
 
 		l = Label(frame, text=lastCheckStr, anchor=W)
 		l.grid(row=0, column=1, sticky=EW)
-		tkExtra.Balloon.set(l, _("Date of last checking"))
+		tkExtra.Balloon.set(l, _("Date last checked"))
 
 		l = Label(frame, text=_("Interval (days):"))
 		l.grid(row=1, column=0, sticky=E, pady=1)
@@ -96,7 +96,7 @@ class CheckUpdateDialog(Toplevel):
 		self.checkInterval.set(checkInt)
 
 		s = Spinbox(frame, text=self.checkInterval, from_=0, to_=365,
-				background="White")
+				background=tkExtra.GLOBAL_CONTROL_BACKGROUND)
 		s.grid(row=1, column=1, sticky=EW)
 		frame.grid_columnconfigure(1, weight=1)
 		tkExtra.Balloon.set(s, _("Days-interval to remind again for checking"))

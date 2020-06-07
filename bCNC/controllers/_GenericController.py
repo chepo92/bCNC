@@ -4,12 +4,12 @@
 from __future__ import absolute_import
 from __future__ import print_function
 
-from CNC import CNC
+from CNC import CNC, WCS
 import time
 import re
 
-STATUSPAT = re.compile(r"^<(\w*?),MPos:([+\-]?\d*\.\d*),([+\-]?\d*\.\d*),([+\-]?\d*\.\d*),WPos:([+\-]?\d*\.\d*),([+\-]?\d*\.\d*),([+\-]?\d*\.\d*),?(.*)>$")
-POSPAT	  = re.compile(r"^\[(...):([+\-]?\d*\.\d*),([+\-]?\d*\.\d*),([+\-]?\d*\.\d*):?(\d*)\]$")
+STATUSPAT = re.compile(r"^<(\w*?),MPos:([+\-]?\d*\.\d*),([+\-]?\d*\.\d*),([+\-]?\d*\.\d*),([+\-]?\d*\.\d*),([+\-]?\d*\.\d*),([+\-]?\d*\.\d*),WPos:([+\-]?\d*\.\d*),([+\-]?\d*\.\d*),([+\-]?\d*\.\d*),([+\-]?\d*\.\d*),([+\-]?\d*\.\d*),([+\-]?\d*\.\d*),?(.*)>$")
+POSPAT	  = re.compile(r"^\[(...):([+\-]?\d*\.\d*),([+\-]?\d*\.\d*),([+\-]?\d*\.\d*),([+\-]?\d*\.\d*),([+\-]?\d*\.\d*),([+\-]?\d*\.\d*):?(\d*)\]$")
 TLOPAT	  = re.compile(r"^\[(...):([+\-]?\d*\.\d*)\]$")
 DOLLARPAT = re.compile(r"^\[G\d* .*\]$")
 SPLITPAT  = re.compile(r"[:,]")
@@ -27,9 +27,6 @@ class _GenericController:
 		pass
 
 	def hardResetAfter(self):
-		pass
-
-	def overrideSet(self):
 		pass
 
 	def viewStartup(self):
@@ -71,7 +68,7 @@ class _GenericController:
 	#----------------------------------------------------------------------
 	def softReset(self, clearAlarm=True):
 		if self.master.serial:
-			self.master.serial.write(b"\030")
+			self.master.serial_write(b"\030")
 		self.master.stopProbe()
 		if clearAlarm: self.master._alarm = False
 		CNC.vars["_OvChanged"] = True	# force a feed change if any
@@ -86,10 +83,14 @@ class _GenericController:
 		self.master._alarm = False
 		self.master.sendGCode("$H")
 
+	def viewStatusReport(self):
+		self.master.serial_write(b"?")
+		self.master.sio_status = True
+
 	def viewParameters(self):
 		self.master.sendGCode("$#")
 
-	def viewState(self):
+	def viewState(self): #Maybe rename to viewParserState() ???
 		self.master.sendGCode("$G")
 
 	#----------------------------------------------------------------------
@@ -99,17 +100,20 @@ class _GenericController:
 		self.master.sendGCode("G90")
 
 	#----------------------------------------------------------------------
-	def goto(self, x=None, y=None, z=None):
+	def goto(self, x=None, y=None, z=None, a=None, b=None, c=None):
 		cmd = "G90G0"
 		if x is not None: cmd += "X%g"%(x)
 		if y is not None: cmd += "Y%g"%(y)
 		if z is not None: cmd += "Z%g"%(z)
+		if a is not None: cmd += "A%g"%(a)
+		if b is not None: cmd += "B%g"%(b)
+		if c is not None: cmd += "C%g"%(c)
 		self.master.sendGCode("%s"%(cmd))
 
 	#----------------------------------------------------------------------
-	# FIXME Duplicate with ControlPage
-	#----------------------------------------------------------------------
-	def _wcsSet(self, x, y, z):
+	def _wcsSet(self, x, y, z, a=None, b=None, c=None):
+		#global wcsvar
+		#p = wcsvar.get()
 		p = WCS.index(CNC.vars["WCS"])
 		if p<6:
 			cmd = "G10L20P%d"%(p+1)
@@ -121,22 +125,25 @@ class _GenericController:
 			cmd = "G92"
 
 		pos = ""
-		if x is not None and abs(x)<10000.0: pos += "X"+str(x)
-		if y is not None and abs(y)<10000.0: pos += "Y"+str(y)
-		if z is not None and abs(z)<10000.0: pos += "Z"+str(z)
+		if x is not None and abs(float(x))<10000.0: pos += "X"+str(x)
+		if y is not None and abs(float(y))<10000.0: pos += "Y"+str(y)
+		if z is not None and abs(float(z))<10000.0: pos += "Z"+str(z)
+		if a is not None and abs(float(a))<10000.0: pos += "A"+str(a)
+		if b is not None and abs(float(b))<10000.0: pos += "B"+str(b)
+		if c is not None and abs(float(c))<10000.0: pos += "C"+str(c)
 		cmd += pos
 		self.master.sendGCode(cmd)
-		self.master.sendGCode("$#")
+		self.viewParameters()
 		self.master.event_generate("<<Status>>",
 			data=(_("Set workspace %s to %s")%(WCS[p],pos)))
-			#data=(_("Set workspace %s to %s")%(WCS[p],pos)).encode("utf8"))
+			#data=(_("Set workspace %s to %s")%(WCS[p],pos)))
 		self.master.event_generate("<<CanvasFocus>>")
 
 	#----------------------------------------------------------------------
 	def feedHold(self, event=None):
 		if event is not None and not self.master.acceptKey(True): return
 		if self.master.serial is None: return
-		self.master.serial.write(b"!")
+		self.master.serial_write(b"!")
 		self.master.serial.flush()
 		self.master._pause = True
 
@@ -144,7 +151,7 @@ class _GenericController:
 	def resume(self, event=None):
 		if event is not None and not self.master.acceptKey(True): return
 		if self.master.serial is None: return
-		self.master.serial.write(b"~")
+		self.master.serial_write(b"~")
 		self.master.serial.flush()
 		self.master._msg   = None
 		self.master._alarm = False
@@ -163,7 +170,7 @@ class _GenericController:
 	# a reset to clear the buffer of the controller
 	#---------------------------------------------------------------------
 	def purgeController(self):
-		self.master.serial.write(b"!")
+		self.master.serial_write(b"!")
 		self.master.serial.flush()
 		time.sleep(1)
 		# remember and send all G commands
@@ -175,7 +182,7 @@ class _GenericController:
 		self.master.stopProbe()
 		if G: self.master.sendGCode(G)			# restore $G
 		self.master.sendGCode("G43.1Z%s"%(TLO))	# restore TLO
-		self.master.sendGCode("$G")
+		self.viewState()
 
 
 	#----------------------------------------------------------------------

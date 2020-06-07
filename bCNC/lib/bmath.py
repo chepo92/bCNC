@@ -421,6 +421,9 @@ class Vector(list):
 	def __div__(self, b):
 		return Vector([x/b for x in self])
 
+	def __truediv__(self, b):
+		return Vector([x/b for x in self])
+
 	# ----------------------------------------------------------------------
 	def __xor__(self, v):
 		"""Cross product"""
@@ -432,6 +435,11 @@ class Vector(list):
 		s = 0.0
 		for a,b in zip(self, v):
 			s += a*b
+
+		#Float precision error was causing dot product to be 1.00000000000002 or so...
+		s = min(1, s)
+		s = max(-1, s)
+
 		return s
 
 	# ----------------------------------------------------------------------
@@ -614,7 +622,7 @@ Vector.Z = Vector(0.0, 0.0, 1.0)
 
 
 # ------------------------------------------------------------------------------
-# Return a random nolor
+# Return a random color
 # ------------------------------------------------------------------------------
 def rndColor(x):
 	def rnd(zw):

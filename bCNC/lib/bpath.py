@@ -223,6 +223,10 @@ class Segment:
 			if self.type == Segment.CW:
 				dist = -dist
 
+			#Handle circle/ARC with zero radius (where did we get such segment???)
+			if self.radius == 0:
+				return self.B
+
 			raddist = dist/self.radius
 			if not B:
 				phi = self.startPhi+raddist
@@ -277,6 +281,7 @@ class Segment:
 		linearized = []
 		if splitlines or self.type == Segment.CW or self.type == Segment.CCW:
 			count = int(ceil(self.length() / maxseg))
+			if count == 0: count = 1 #fix for zero length
 			step = self.length() / count
 			#print "---"
 			for i in range(0,count):
@@ -881,13 +886,13 @@ class Path(list):
 			y3 = (A[1]+B[1])/2
 
 			C = Vector(
-				x3 + sqrt(r**2-(q/2)**2)*(A[1]-B[1])/q,
-				y3 + sqrt(r**2-(q/2)**2)*(B[0]-A[0])/q
+				x3 + sqrt(abs(r**2-(q/2)**2))*(A[1]-B[1])/q,
+				y3 + sqrt(abs(r**2-(q/2)**2))*(B[0]-A[0])/q
 			)
 
 			D = Vector(
-				x3 - sqrt(r**2-(q/2)**2)*(A[1]-B[1])/q,
-				y3 - sqrt(r**2-(q/2)**2)*(B[0]-A[0])/q
+				x3 - sqrt(abs(r**2-(q/2)**2))*(A[1]-B[1])/q,
+				y3 - sqrt(abs(r**2-(q/2)**2))*(B[0]-A[0])/q
 			)
 
 			#There are two solutions (C and D), choose which one we need

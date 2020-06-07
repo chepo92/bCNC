@@ -19,6 +19,7 @@ import tempfile
 import threading
 
 from CNC import CNC
+from Utils import prgpath
 
 try:
 	import urlparse
@@ -41,7 +42,6 @@ HOSTNAME = "localhost"
 port     = 8080
 
 httpd    = None
-prgpath  = os.path.abspath(os.path.dirname(sys.argv[0]))
 webpath  = "%s/pendant"%(prgpath)
 iconpath = "%s/icons/"%(prgpath)
 
@@ -61,9 +61,11 @@ class Pendant(HTTPServer.BaseHTTPRequestHandler):
 			HTTPServer.BaseHTTPRequestHandler.log_message(self, fmt, *args)
 
 	#----------------------------------------------------------------------
-	def do_HEAD(self, rc=200, content="text/html"):
+	def do_HEAD(self, rc=200, content="text/html", cl=0):
 		self.send_response(rc)
 		self.send_header("Content-type", content)
+		if cl != 0:
+			self.send_header("Content-length", cl)
 		self.end_headers()
 
 	#----------------------------------------------------------------------
@@ -87,28 +89,30 @@ class Pendant(HTTPServer.BaseHTTPRequestHandler):
 					for line in value.split('\n'):
 						httpd.app.queue.put(line+"\n")
 				elif key=="cmd":
-					httpd.app.pendant.put(urllib.unquote(value))
+					httpd.app.pendant.put(urlparse.unquote(value))
 			#send empty response so browser does not generate errors
-			self.do_HEAD(200, "text/text")
-			self.wfile.write("")
+			self.do_HEAD(200, "text/text", cl=len(""))
+			self.wfile.write("".encode())
 
 		elif page == "/state":
-			self.do_HEAD(200, content="text/text")
 			tmp = {}
-			for name in ["controller", "state", "pins", "color", "msg", "wx", "wy", "wz", "G"]:
+			for name in ["controller", "state", "pins", "color", "msg", "wx", "wy", "wz", "G", "OvFeed", "OvRapid", "OvSpindle"]:
 				tmp[name] = CNC.vars[name]
-			self.wfile.write(json.dumps(tmp))
+			contentToSend = json.dumps(tmp)
+			self.do_HEAD(200, content="text/text", cl=len(contentToSend))
+			self.wfile.write(contentToSend.encode())
 
 		elif page == "/config":
-			self.do_HEAD(200, content="text/text")
 			snd = {}
 			snd["rpmmax"] = httpd.app.get("CNC","spindlemax")
-			self.wfile.write(json.dumps(snd))
+			contentToSend = json.dumps(snd)
+			self.do_HEAD(200, content="text/text", cl=len(contentToSend))
+			self.wfile.write(contentToSend.encode())
 
 		elif page == "/icon":
 			if arg is None: return
-			self.do_HEAD(200, content="image/gif")
 			filename = os.path.join(iconpath, arg["name"]+".gif")
+			self.do_HEAD(200, content="image/gif", cl=os.path.getsize(filename))
 			try:
 				f = open(filename,"rb")
 				self.wfile.write(f.read())
@@ -129,11 +133,11 @@ class Pendant(HTTPServer.BaseHTTPRequestHandler):
 						Image.open(tmp.name).save(out.name, 'GIF')
 						out.flush()
 						out.seek(0)
-						self.do_HEAD(200, content="image/gif")
+						self.do_HEAD(200, content="image/gif", cl=os.path.getsize(tmp.name))
 						self.wfile.write(out.read())
 				except:
-					self.do_HEAD(200, content="image/gif")
 					filename = os.path.join(iconpath, "warn.gif")
+					self.do_HEAD(200, content="image/gif", cl=os.path.getsize(filename))
 					try:
 						f = open(filename,"rb")
 						self.wfile.write(f.read())
@@ -150,7 +154,7 @@ class Pendant(HTTPServer.BaseHTTPRequestHandler):
 			if Pendant.camera.read():
 				Pendant.camera.save("camera.jpg")
 				#cv.imwrite("camera.jpg",img)
-				self.do_HEAD(200, content="image/jpeg")
+				self.do_HEAD(200, content="image/jpeg", cl=os.path.getsize("camera.jpg"))
 				try:
 					f = open("camera.jpg","rb")
 					self.wfile.write(f.read())
@@ -229,7 +233,7 @@ class Pendant(HTTPServer.BaseHTTPRequestHandler):
 
 		if page == "": page = "index.html"
 		try:
-			f = open(os.path.join(webpath,page),"r")
+			f = open(os.path.join(webpath,page),"rb")
 			self.wfile.write(f.read())
 			f.close()
 		except IOError:
@@ -243,7 +247,7 @@ class Pendant(HTTPServer.BaseHTTPRequestHandler):
 Page not found.
 </body>
 </html>
-""")
+""".encode())
 
 
 # -----------------------------------------------------------------------------

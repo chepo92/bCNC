@@ -24,6 +24,7 @@ import glob
 import Utils
 import Ribbon
 import tkExtra
+
 import Unicode
 import CNCRibbon
 
@@ -598,6 +599,7 @@ class Config(_Base):
 			("lasercutter"   , "bool", 0    , _("Laser Cutter"))   ,
 			("laseradaptive" , "bool", 0    , _("Laser Adaptive Power"))   ,
 			("doublesizeicon", "bool", 0    , _("Double Size Icon"))   ,
+			("enable6axisopt", "bool", 0	, _("Enable 6 Axis Displays"))	,
 			("acceleration_x", "mm"  , 25.0 , _("Acceleration x"))   ,
 			("acceleration_y", "mm"  , 25.0 , _("Acceleration y"))   ,
 			("acceleration_z", "mm"  , 5.0  , _("Acceleration z"))   ,
@@ -729,7 +731,7 @@ class Cut(DataBase):
 			("feed",         "mm" ,    "", _("Feed")),
 			("feedz",        "mm" ,    "", _("Plunge Feed")),
 			("strategy",     "flat,helical+bottom,helical,ramp" ,    "helical+bottom", _("Cutting strategy")),
-			("ramp", "int" , 10, _("Ramp length"), _("positive value = relative to tool diameter (5 to 10 probably makes sense), negative = absolute ramp distance (you probably don't need this)")),
+			("ramp", "int" , 10, _("Ramp length"), _("positive value = relative to tool diameter (5 to 10 probably makes sense), negative = absolute ramp distance (you probably don't need this). Also note that ramp can't currently be shorter than affected g-code segment.")),
 			("cutFromTop", "bool" , False, _("First cut at surface height")),
 			("spring", "bool" , False, _("Spring pass"), _("Do the last cut once more in opposite direction. Helix bottom is disabled in such case.")),
 			("exitpoint", "on path,inside,outside", "on path", _("Exit strategy (usefull for threads)"), _("You should probably always use 'on path', unless you are threadmilling!")),
@@ -820,6 +822,21 @@ class Drill(DataBase):
 			("distance",  "mm" ,    "", _("Distance (mm)")),
 			("number",    "int" ,   "", _("Number"))
 		]
+		self.help = """Drill a hole in the center of the selected path or drill many holes along the selected path.
+
+MODULE PARAMETERS:
+
+* center : if checked, there is only one drill in the center of the selected path. (Otherwise drill along path)
+
+* depth : Depth of the drill. If not provided, stock material thickness is used. (usually negative value)
+
+* peck: Peck step depth. If provided, drill with peck depth step, raising the drill to z travel value. If not provided, one pass drill is generated.
+
+* dwell: Dwell time at the bottom. If pecking is defined, dwell also at lifted height.
+
+* distance: Distance between drills if drilling alog path. (Number of drills will superceed this parameter))
+
+* number: Number of drills if drilling along path. If nonzero, Parameter 'distance' has no effect."""
 		self.buttons.append("exe")
 
 	# ----------------------------------------------------------------------
@@ -853,7 +870,7 @@ class Profile(DataBase):
 			("direction","inside,outside" , "outside", _("Direction"), _('Should we machine on inside or outside of the shape?')),
 			("offset",   "float",  0.0, _("Additional offset distance")),
 			("overcut",  "bool",     1, _("Overcut"), _('Sets if we want to overcut or not.')),
-			("pocket",  "bool",     0, _("Pocket"), _('Generate pocket after profiling? Usefull for making pockets with overcuts.'))
+			("pocket",  "bool",     0, _("Pocket"), _('Generate pocket after profiling? Useful for making pockets with overcuts.'))
 		]
 		self.buttons.append("exe")
 		self.help = '''This plugin offsets shapes to create toolpaths for profiling operation.
@@ -868,7 +885,7 @@ And with overcut:
 #overcut-with
 
 Blue is the original shape from CAD
-Turqoise is the generated toolpath
+Turquoise is the generated toolpath
 Grey is simulation of how part will look after machining
 '''
 
@@ -936,9 +953,9 @@ Tabs after cutting the path they're attached to:
 
 Tab shows the size of material, which will be left in place after cutting. It's compensated for endmill diameter during cut operation.
 
-Note that tabs used to be square, but if there was diagonal segment crossing such tab, it resulted in larger tab without any reason. If we use circular tabs, the tab size is always the same, no matter the angle of segment.
+Note that tabs used to be square, but if there was a diagonal segment crossing such tab, it resulted in larger tab without any reason. If we use circular tabs, the tab size is always the same, no matter the angle of segment.
 
-You can move selected tabs using "Move" feature in "Editor". If you want to modify individual tabs, you have to first use "Split" feature to break the block to individual tabs. After moving them, you can "Join" them back together.
+You can move selected tabs using "Move" feature in "Editor". If you want to modify individual tabs, you have to first use "Split" feature to break the block into individual tabs. After moving them, you can "Join" them back together.
 '''
 
 	# ----------------------------------------------------------------------
@@ -1494,7 +1511,7 @@ class ConfigGroup(CNCRibbon.ButtonMenuGroup):
 		# ===
 		col,row=0,0
 		f = Frame(self.frame)
-		f.grid(row=row, column=col, columnspan=3, padx=0, pady=0, sticky=NSEW)
+		f.grid(row=row, column=col, columnspan=2, padx=0, pady=0, sticky=NSEW)
 
 		b = Label(f, image=Utils.icons["globe"], background=Ribbon._BACKGROUND)
 		b.pack(side=LEFT)
@@ -1511,34 +1528,6 @@ class ConfigGroup(CNCRibbon.ButtonMenuGroup):
 		# ===
 		row += 1
 		b = Ribbon.LabelRadiobutton(self.frame,
-				image=Utils.icons["camera"],
-				text=_("Camera"),
-				compound=LEFT,
-				anchor=W,
-				variable=app.tools.active,
-				value="Camera",
-				background=Ribbon._BACKGROUND)
-		b.grid(row=row, column=col, padx=1, pady=0, sticky=NSEW)
-		tkExtra.Balloon.set(b, _("Camera Configuration"))
-		self.addWidget(b)
-
-		# ---
-		row += 1
-		b = Ribbon.LabelRadiobutton(self.frame,
-				image=Utils.icons["color"],
-				text=_("Colors"),
-				compound=LEFT,
-				anchor=W,
-				variable=app.tools.active,
-				value="Color",
-				background=Ribbon._BACKGROUND)
-		b.grid(row=row, column=col, padx=1, pady=0, sticky=NSEW)
-		tkExtra.Balloon.set(b, _("Color configuration"))
-		self.addWidget(b)
-
-		# ===
-		col,row = col+1,1
-		b = Ribbon.LabelRadiobutton(self.frame,
 				image=Utils.icons["config"],
 				text=_("Config"),
 				compound=LEFT,
@@ -1551,7 +1540,22 @@ class ConfigGroup(CNCRibbon.ButtonMenuGroup):
 		self.addWidget(b)
 
 		# ---
+		col += 1
+		b = Ribbon.LabelRadiobutton(self.frame,
+				image=Utils.icons["shortcut"],
+				text=_("Shortcuts"),
+				compound=LEFT,
+				anchor=W,
+				variable=app.tools.active,
+				value="Shortcut",
+				background=Ribbon._BACKGROUND)
+		b.grid(row=row, column=col, padx=1, pady=0, sticky=NSEW)
+		tkExtra.Balloon.set(b, _("Shortcuts configuration"))
+		self.addWidget(b)
+
+		# ---
 		row += 1
+		col = 0
 		b = Ribbon.LabelRadiobutton(self.frame,
 				image=Utils.icons["arduino"],
 				text=_("Controller"),
@@ -1564,34 +1568,20 @@ class ConfigGroup(CNCRibbon.ButtonMenuGroup):
 		tkExtra.Balloon.set(b, _("Controller (GRBL) configuration"))
 		self.addWidget(b)
 
-		# ===
-		col,row = col+1,1
+		# ---
+		col += 1
 		b = Ribbon.LabelRadiobutton(self.frame,
-				image=Utils.icons["font"],
-				text=_("Fonts"),
+				image=Utils.icons["camera"],
+				text=_("Camera"),
 				compound=LEFT,
 				anchor=W,
 				variable=app.tools.active,
-				value="Font",
+				value="Camera",
 				background=Ribbon._BACKGROUND)
 		b.grid(row=row, column=col, padx=1, pady=0, sticky=NSEW)
-		tkExtra.Balloon.set(b, _("Font configuration"))
+		tkExtra.Balloon.set(b, _("Camera Configuration"))
 		self.addWidget(b)
 
-		# ---
-		row += 1
-		b = Ribbon.LabelRadiobutton(self.frame,
-				image=Utils.icons["shortcut"],
-				text=_("Shortcuts"),
-				compound=LEFT,
-				anchor=W,
-				variable=app.tools.active,
-				value="Shortcut",
-				background=Ribbon._BACKGROUND)
-		b.grid(row=row, column=col, padx=1, pady=0, sticky=NSEW)
-		tkExtra.Balloon.set(b, _("Shortcuts configuration"))
-		self.addWidget(b)
-#
 #		# ---
 #		row += 1
 #		b = Ribbon.LabelRadiobutton(self.frame,
@@ -1628,15 +1618,24 @@ class ConfigGroup(CNCRibbon.ButtonMenuGroup):
 	#----------------------------------------------------------------------
 	def createMenu(self):
 		menu = Menu(self, tearoff=0)
+		menu.add_command(
+				label=_("User File"),
+				image=Utils.icons["about"], compound=LEFT,
+				command=self.app.showUserFile)
 		menu.add_radiobutton(
 				label=_("Events"),
 				image=Utils.icons["event"], compound=LEFT,
 				variable=self.app.tools.active,
 				value="Events")
-		menu.add_command(
-				label=_("User File"),
-				image=Utils.icons["about"], compound=LEFT,
-				command=self.app.showUserFile)
+		menu.add_radiobutton(
+				label=_("Colors"),
+				image=Utils.icons["color"], compound=LEFT,
+				variable=self.app.tools.active, value="Color")
+		menu.add_radiobutton(
+				label=_("Fonts"),
+				image=Utils.icons["font"], compound=LEFT,
+				variable=self.app.tools.active, value="Font")
+
 		return menu
 
 
@@ -1671,7 +1670,7 @@ class ToolsFrame(CNCRibbon.PageFrame):
 					 height=20,
 					 header = False,
 					 stretch = "last",
-					 background = "White")
+					 background = tkExtra.GLOBAL_CONTROL_BACKGROUND)
 		self.toolList.sortAssist = None
 		self.toolList.pack(fill=BOTH, expand=YES)
 		self.toolList.bindList("<Double-1>",	self.help)
@@ -1778,14 +1777,14 @@ class ToolsPage(CNCRibbon.Page):
 	# Add a widget in the widgets list to enable disable during the run
 	#----------------------------------------------------------------------
 	def register(self):
-		self._register(
-			(DataBaseGroup,
-			 CAMGroup,
+		self._register((
+			ConfigGroup,
+			DataBaseGroup,
+			CAMGroup,
 			#GeneratorGroup,
 			#ArtisticGroup,
 			#MacrosGroup,
-			ConfigGroup),
-			(ToolsFrame,))
+			), (ToolsFrame,))
 
 	#----------------------------------------------------------------------
 	def edit(self, event=None):

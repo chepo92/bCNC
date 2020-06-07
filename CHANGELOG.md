@@ -5,11 +5,14 @@ There are too much commits, so i've created this brief overview of new features 
 ## 0.9.15
 
 - New features
-  - Can load SVG files (only paths without transformations, see wiki) #902
+  - Python 3 is (mostly) supported now #228
+  - 6 axis support #1384
+  - Can load SVG files (~only paths without transformations~ improved by tatarize, see wiki) #902 #1312
   - Can slice 3D meshes in STL and PLY formats (with minor limitations) #901
   - Can export 3D scan (autolevel probe) data in XYZ format suitable for meshlab poisson surface reconstruction
   - Support for helical and ramp cutting #590
   - New style of tabs implemented using "islands" with support for arbitrary shapes and pockets #220
+  - Interactive value entry is now possible in g-code scripting #1256
   - DRO entry can now handle math formulas like: `sqrt(safe)+1`, `sin(pi**2)` or `3.175/2` #789
   - Drag Knife postprocessor and simulator plugin #975
   - Jog digitizer to create drawing by recording points while jogging #929
